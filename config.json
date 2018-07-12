@@ -1,0 +1,7 @@
+{
+	"telegram_bot_token": "",
+	"paw_app": {
+		"url": "https://YOUR_PYTHONANYWHERE_USERNAME.pythonanywhere.com",
+		"webhook_secret": ""
+	}
+}
