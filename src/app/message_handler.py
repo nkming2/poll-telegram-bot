@@ -108,6 +108,8 @@ class MessageHandler:
 		# Ignore non-text content (like new memeber msg)
 
 	def _handle_cmd(self, text):
+		if text.endswith("@yapbbot"):
+			text = text[:-8]
 		if text == "/start" or text == "/poll":
 			self._handle_poll_cmd()
 
