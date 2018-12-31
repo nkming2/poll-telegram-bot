@@ -234,6 +234,7 @@ class CallbackQueryHandler:
 	RESPONSE_ERROR_POLL_EXIST = "There can only be one active poll per chat, see /poll"
 	RESPONSE_ERROR_POLL_NOT_EXIST = "No active poll in this chat. Enter /start"
 	RESPONSE_ERROR_MULTIPLE_VOTE = "You have voted already, %s"
+	RESPONSE_ERROR_IDENTICAL_VOTE = "You have picked this choice already, %s"
 	RESPONSE_ERROR_NOT_CREATOR = "Only the poll creator can do that"
 	RESPONSE_ERROR_RM_LAST_CHOICE = "Can't remove the last choice"
 
@@ -460,7 +461,7 @@ class CallbackQueryHandler:
 			else:
 				# Make sure user hasn't voted for this choice yet
 				if any(user_id == v_m.user_id for v_m in choice_m.votes):
-					raise _ResponseException(self.RESPONSE_ERROR_MULTIPLE_VOTE
+					raise _ResponseException(self.RESPONSE_ERROR_IDENTICAL_VOTE
 							% f"[{self._user['first_name']}](tg://user?id={self._user['id']})")
 
 			vote_m = model.PollVote(user_id = user_id,
