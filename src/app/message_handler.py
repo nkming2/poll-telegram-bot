@@ -224,6 +224,8 @@ class MessageHandler:
 class CallbackQueryHandler:
 	RESPONSE_EXCEPTION = "Unknown error"
 	RESPONSE_VOTE = "Pick your choice"
+	RESPONSE_VOTED = "Your vote has been noted, %s"
+	RESPONSE_VOTE_ANNOUNCE = "%s has picked *%s*"
 	RESPONSE_EDIT_POLL = "What do you want to modify?"
 	RESPONSE_RM_CHOICE = "Pick a choice to be removed with its associated votes. You *cannot* undo this action"
 	RESPONSE_RM_CHOICE_PERSISTED_F = "Removed choice *%s*"
@@ -469,11 +471,18 @@ class CallbackQueryHandler:
 					choice = choice_m)
 			s.add(vote_m)
 
-			text = _repr_poll(poll_m)
-			keyboard = _make_poll_inline_keyboard(
+			text = self.RESPONSE_VOTED % (
+					f"[{self._user['first_name']}](tg://user?id={self._user['id']})")
+			announce_text = self.RESPONSE_VOTE_ANNOUNCE % (
+					f"[{self._user['first_name']}](tg://user?id={self._user['id']})",
+					choice_m.text)
+			poll_text = _repr_poll(poll_m)
+			poll_keyboard = _make_poll_inline_keyboard(
 					poll_m.creator_user_id == self._user["id"])
-		self._edit_message_text(text, parse_mode = "Markdown",
-				reply_markup = InlineKeyboardMarkup(inline_keyboard = keyboard))
+		self._edit_message_text(text, parse_mode = "Markdown")
+		self._send_message(announce_text, parse_mode = "Markdown")
+		self._send_message(poll_text, parse_mode = "Markdown",
+				reply_markup = InlineKeyboardMarkup(inline_keyboard = poll_keyboard))
 
 	def _handle_cancel_op_cmd(self):
 		if not self._bot.deleteMessage((self._chat_id,
