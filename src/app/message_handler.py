@@ -8,6 +8,19 @@ from app.lazy import Lazy
 from app.log import Log
 import app.model as model
 
+def _query_active_user_votes(session, chat_id, user_id):
+	return session.query(model.Poll) \
+			.filter(model.Poll.chat_id == chat_id) \
+			.filter(model.Poll.closed_at == None) \
+			.outerjoin(model.Poll.choices) \
+			.options(contains_eager(model.Poll.choices)) \
+			.outerjoin(model.PollChoice.votes) \
+			.options(contains_eager(model.Poll.choices,
+					model.PollChoice.votes)) \
+			.filter(model.PollVote.user_id == user_id) \
+			.order_by(model.Poll.poll_id, model.PollChoice.poll_choice_id) \
+			.all()
+
 def _query_active_polls(session, chat_id):
 	return session.query(model.Poll) \
 			.filter(model.Poll.chat_id == chat_id) \
@@ -42,6 +55,7 @@ def _repr_poll(poll_m, is_sort_by_votes = False):
 def _make_poll_inline_keyboard(is_creator):
 	keyboard = [[
 		InlineKeyboardButton(text = "Vote", callback_data = "/vote"),
+		InlineKeyboardButton(text = "Unvote", callback_data = "/unvote"),
 	]]
 	keyboard += [[
 		InlineKeyboardButton(text = "Edit", callback_data = "/edit-poll"),
@@ -226,6 +240,9 @@ class CallbackQueryHandler:
 	RESPONSE_VOTE = "Pick your choice"
 	RESPONSE_VOTED = "Your vote has been noted, %s"
 	RESPONSE_VOTE_ANNOUNCE = "%s has picked *%s*"
+	RESPONSE_UNVOTE = "Pick the choice you wish to unvote"
+	RESPONSE_UNVOTED = "Your vote has been removed, %s"
+	RESPONSE_UNVOTE_ANNOUNCE = "%s has unpicked *%s*"
 	RESPONSE_EDIT_POLL = "What do you want to modify?"
 	RESPONSE_RM_CHOICE = "Pick a choice to be removed with its associated votes. You *cannot* undo this action"
 	RESPONSE_RM_CHOICE_PERSISTED_F = "Removed choice *%s*"
@@ -235,6 +252,7 @@ class CallbackQueryHandler:
 	RESPONSE_CANCEL_OP = "Cancelled"
 	RESPONSE_ERROR_POLL_EXIST = "There can only be one active poll per chat, see /poll"
 	RESPONSE_ERROR_POLL_NOT_EXIST = "No active poll in this chat. Enter /start"
+	RESPONSE_ERROR_NOT_VOTED = "You haven't voted yet, %s"
 	RESPONSE_ERROR_MULTIPLE_VOTE = "You have voted already, %s"
 	RESPONSE_ERROR_IDENTICAL_VOTE = "You have picked this choice already, %s"
 	RESPONSE_ERROR_NOT_CREATOR = "Only the poll creator can do that"
@@ -288,6 +306,10 @@ class CallbackQueryHandler:
 			self._handle_vote_cmd()
 		elif text.startswith("/do-vote-"):
 			self._handle_do_vote_cmd(text)
+		elif text == "/unvote":
+			self._handle_unvote_cmd()
+		elif text.startswith("/do-unvote-"):
+			self._handle_do_unvote_cmd(text)
 		elif text == "/cancel-op":
 			self._handle_cancel_op_cmd()
 
@@ -481,6 +503,72 @@ class CallbackQueryHandler:
 					poll_m.creator_user_id == self._user["id"])
 		self._edit_message_text(text, parse_mode = "Markdown")
 		self._send_message(announce_text, parse_mode = "Markdown")
+		self._send_message(poll_text, parse_mode = "Markdown",
+				reply_markup = InlineKeyboardMarkup(inline_keyboard = poll_keyboard))
+
+	def _handle_unvote_cmd(self):
+		with model.open_session(self._Session) as s:
+			poll_ms = _query_active_user_votes(s, self._chat_id, self._user["id"])
+			if not poll_ms:
+				raise _ResponseException(self.RESPONSE_ERROR_NOT_VOTED
+						% f"[{self._user['first_name']}](tg://user?id={self._user['id']})")
+
+			poll_m = poll_ms[0]
+			btns = [InlineKeyboardButton(text = c_m.text,
+							callback_data = f"/do-unvote-{c_m.poll_choice_id}")
+					for c_m in poll_m.choices]
+			keyboard = [btns[i:i + 2] for i in range(0, len(btns), 2)]
+		self._edit_message_text(self.RESPONSE_UNVOTE,
+				reply_markup = InlineKeyboardMarkup(inline_keyboard = keyboard))
+
+	def _handle_do_unvote_cmd(self, text):
+		# /do-unvote-{choice_id}
+		try:
+			vote = int(text[11:])
+		except Exception:
+			Log.e(f"Failed while parsing choice id: {text}")
+			raise
+
+		with model.open_session(self._Session) as s:
+			poll_ms = _query_active_user_votes(s, self._chat_id, self._user["id"])
+			if not poll_ms:
+				raise _ResponseException(self.RESPONSE_ERROR_NOT_VOTED
+						% f"[{self._user['first_name']}](tg://user?id={self._user['id']})")
+
+			poll_m = poll_ms[0]
+			for c_m in poll_m.choices:
+				if c_m.poll_choice_id == vote:
+					for v_m in c_m.votes:
+						if v_m.user_id == self._user["id"]:
+							vote_m = v_m
+							break
+			try:
+				choice_text = vote_m.choice.text
+				s.delete(vote_m)
+			except NameError:
+				# User hasn't voted this option?
+				raise _ResponseException(self.RESPONSE_ERROR_NOT_VOTED
+						% f"[{self._user['first_name']}](tg://user?id={self._user['id']})")
+
+			text = self.RESPONSE_UNVOTED % (
+					f"[{self._user['first_name']}](tg://user?id={self._user['id']})")
+			announce_text = self.RESPONSE_UNVOTE_ANNOUNCE % (
+					f"[{self._user['first_name']}](tg://user?id={self._user['id']})",
+					choice_text)
+		self._edit_message_text(text, parse_mode = "Markdown")
+		self._send_message(announce_text, parse_mode = "Markdown")
+
+		# Start a new session to make the delete effective
+		with model.open_session(self._Session) as s:
+			poll_ms = _query_active_polls(s, self._chat_id)
+			if not poll_ms:
+				# ???
+				raise _ResponseException(self.RESPONSE_ERROR_POLL_NOT_EXIST)
+
+			poll_m = poll_ms[0]
+			poll_text = _repr_poll(poll_m)
+			poll_keyboard = _make_poll_inline_keyboard(
+					poll_m.creator_user_id == self._user["id"])
 		self._send_message(poll_text, parse_mode = "Markdown",
 				reply_markup = InlineKeyboardMarkup(inline_keyboard = poll_keyboard))
 
