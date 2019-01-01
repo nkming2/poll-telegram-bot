@@ -30,7 +30,7 @@ def _query_active_polls(session, chat_id):
 			.outerjoin(model.PollChoice.votes) \
 			.options(contains_eager(model.Poll.choices,
 					model.PollChoice.votes)) \
-			.order_by(model.Poll.poll_id, model.PollChoice.poll_choice_id) \
+			.order_by(model.Poll.poll_id, model.PollChoice.poll_choice_id, model.PollVote.poll_vote_id) \
 			.all()
 
 def _repr_poll(poll_m, is_sort_by_votes = False):
