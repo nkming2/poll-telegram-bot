@@ -6,6 +6,7 @@ import urllib3
 from app.config_loader import ConfigLoader
 from app.log import Log
 from app.message_handler import CallbackQueryHandler, MessageHandler
+import app.model as model
 
 flask_app = None
 
@@ -47,6 +48,14 @@ class PawApp():
 
 	def _on_webhook(self):
 		update = request.get_json()
+		self._handle_update(update)
+		return "OK"
+
+	def _handle_update(self, update):
+		if "update_id" in update:
+			if not self._should_process_update(update["update_id"]):
+				return
+
 		if "message" in update:
 			# message request
 			MessageHandler(self._bot, update["message"],
@@ -55,7 +64,26 @@ class PawApp():
 			# inline request
 			CallbackQueryHandler(self._bot, update["callback_query"],
 					self._make_session_class()).handle()
-		return "OK"
+
+	def _should_process_update(self, update_id):
+		import datetime
+		now = datetime.datetime.utcnow()
+		dt = datetime.timedelta(weeks = 1)
+		from_time = now - dt
+		with model.open_session(self._make_session_class()) as s:
+			count = s.query(model.HandledUpdate) \
+					.filter(model.HandledUpdate.update_id == update_id) \
+					.filter(model.HandledUpdate.created_at >= from_time) \
+					.count()
+			if count == 0:
+				# Add this update
+				m = model.HandledUpdate(update_id = update_id)
+				s.add(m)
+			# Cleanup old ones
+			s.query(model.HandledUpdate) \
+					.filter(model.HandledUpdate.created_at < from_time) \
+					.delete(synchronize_session = False)
+			return (count == 0)
 
 	def _make_session_class(self):
 		sqlite_engine = create_engine("sqlite:///poll.db", echo = True)

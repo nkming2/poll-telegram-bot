@@ -7,6 +7,13 @@ from sqlalchemy.ext.declarative import declarative_base
 
 Base = declarative_base()
 
+class HandledUpdate(Base):
+	__tablename__ = "handled_update"
+	_id = Column(Integer, primary_key = True)
+	update_id = Column(Integer, index = True)
+	created_at = Column(DateTime, nullable = False,
+			default = datetime.datetime.utcnow)
+
 class Poll(Base):
 	__tablename__ = "poll"
 	poll_id = Column(Integer, primary_key = True)
