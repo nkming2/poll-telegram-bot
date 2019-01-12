@@ -1,5 +1,4 @@
 from datetime import datetime
-import pytz
 from sqlalchemy.orm import contains_eager
 import telepot
 from telepot.exception import TelegramError
@@ -341,7 +340,7 @@ class CallbackQueryHandler:
 			if poll_m.creator_user_id != self._user["id"]:
 				raise _ResponseException(self.RESPONSE_ERROR_NOT_CREATOR)
 			text = "Result:\n" + _repr_poll(poll_m, is_sort_by_votes = True)
-			poll_m.closed_at = datetime.now(pytz.utc)
+			poll_m.closed_at = datetime.utcnow()
 		self._edit_message_text(text, parse_mode = "Markdown")
 
 	def _handle_edit_poll_cmd(self):

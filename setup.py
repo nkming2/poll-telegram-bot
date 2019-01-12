@@ -5,7 +5,6 @@ requires = [
 	"telepot",
 	"Flask",
 	"SQLAlchemy",
-	"pytz",
 ]
 
 setup(name = "poll-telegram-bot",

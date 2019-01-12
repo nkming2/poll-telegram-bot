@@ -1,4 +1,5 @@
 from contextlib import contextmanager
+import datetime
 from sqlalchemy import Boolean, Column, DateTime, Integer, String, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -14,9 +15,9 @@ class Poll(Base):
 	# is a long value
 	chat_id = Column(String, nullable = False)
 	creator_user_id = Column(Integer, nullable = False)
-	created_at = Column(DateTime(timezone = True), nullable = False,
-			server_default = func.now())
-	closed_at = Column(DateTime(timezone = True))
+	created_at = Column(DateTime, nullable = False,
+			default = datetime.datetime.utcnow)
+	closed_at = Column(DateTime)
 	is_multiple_vote = Column(Boolean, nullable = False, default = False)
 
 	choices = relationship("PollChoice", backref = "poll",
@@ -39,8 +40,8 @@ class PollVote(Base):
 			ondelete = "CASCADE"), nullable = False)
 	user_id = Column(Integer, nullable = False)
 	user_name = Column(String, nullable = False)
-	created_at = Column(DateTime(timezone = True), nullable = False,
-			server_default = func.now())
+	created_at = Column(DateTime, nullable = False,
+			default = datetime.datetime.utcnow)
 
 	UniqueConstraint(poll_choice_id, user_id)
 
